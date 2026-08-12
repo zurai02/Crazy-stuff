@@ -1,0 +1,241 @@
+name: Lua Validation & Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Scr/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Scr/**'
+
+jobs:
+  validate:
+    name: Validate Lua Syntax
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Lua
+      uses: leafo/gh-actions-lua@v10
+      with:
+        luaVersion: "5.1"
+
+    - name: Setup LuaRocks
+      uses: leafo/gh-actions-luarocks@v4
+
+    - name: Install luacheck
+      run: luarocks install luacheck
+
+    - name: Validate Main module.lua syntax
+      run: |
+        echo "=== Checking Main module.lua ==="
+        lua -e "
+          local file = io.open('Scr/Modules/Main module.lua', 'r')
+          if not file then error('File not found') end
+          local content = file:read('*a')
+          file:close()
+
+          -- Check for escaped characters (common corruption)
+          if content:match('\\\*') or content:match('\\\-') then
+            error('ERROR: File contains escaped characters! Do not escape * or - in comments.')
+          end
+
+          -- Try to load
+          local fn, err = loadstring(content)
+          if not fn then
+            error('SYNTAX ERROR: ' .. tostring(err))
+          end
+          print('Main module.lua: OK')
+        "
+
+    - name: Validate C.lua syntax
+      run: |
+        echo "=== Checking C.lua ==="
+        lua -e "
+          local file = io.open('Scr/Modules/C.lua', 'r')
+          if not file then error('File not found') end
+          local content = file:read('*a')
+          file:close()
+
+          if content:match('\\\*') or content:match('\\\-') then
+            error('ERROR: File contains escaped characters!')
+          end
+
+          local fn, err = loadstring(content)
+          if not fn then
+            error('SYNTAX ERROR: ' .. tostring(err))
+          end
+          print('C.lua: OK')
+        "
+
+    - name: Validate Main.lua (Rayfield) syntax
+      run: |
+        echo "=== Checking Main.lua (Rayfield) ==="
+        lua -e "
+          local file = io.open('Scr/Luau-scripts/Main.lua', 'r')
+          if not file then error('File not found') end
+          local content = file:read('*a')
+          file:close()
+
+          if content:match('\\\*') or content:match('\\\-') then
+            error('ERROR: File contains escaped characters!')
+          end
+
+          local fn, err = loadstring(content)
+          if not fn then
+            error('SYNTAX ERROR: ' .. tostring(err))
+          end
+          print('Main.lua (Rayfield): OK')
+        "
+
+    - name: Run luacheck on all Lua files
+      run: |
+        echo "=== Running luacheck ==="
+        # Create luacheck config that ignores Roblox globals
+        cat > .luacheckrc << 'EOF'
+        globals = {
+          "game", "workspace", "script", "Enum", "tick", "wait", "spawn",
+          "delay", "warn", "print", "error", "assert", "pcall", "xpcall",
+          "pairs", "ipairs", "next", "tonumber", "tostring", "type",
+          "typeof", "unpack", "select", "rawget", "rawset", "rawequal",
+          "getfenv", "setfenv", "loadstring", "require", "module",
+          "getmetatable", "setmetatable", "math", "string", "table",
+          "coroutine", "debug", "os", "io", "bit32", "utf8", "buffer",
+          "Vector3", "Vector2", "Vector3int16", "Vector2int16",
+          "CFrame", "Color3", "UDim", "UDim2", "Rect", "Region3",
+          "Region3int16", "NumberRange", "NumberSequence", "NumberSequenceKeypoint",
+          "ColorSequence", "ColorSequenceKeypoint", "BrickColor", "Ray",
+          "Faces", "Axes", "PathWaypoint", "PhysicalProperties",
+          "TweenInfo", "Random", "Font", "DateTime", "DateTimeKind",
+          "DockWidgetPluginGuiInfo", "OverlapParams", "RaycastParams",
+          "getgenv", "setgenv", "gethui", "cloneref", "getcustomasset",
+          "writefile", "readfile", "isfile", "listfiles", "delfile",
+          "makefolder", "delfolder", "isfolder", "loadstring",
+          "http_request", "request", "syn", "fluxus", "krnl",
+          "identifyexecutor", "getexecutorname", "hookfunction",
+          "newcclosure", "checkcaller", "islclosure", "getgc",
+          "getconnections", "getinstances", "getnilinstances",
+          "getscripts", "getloadedmodules", "fireclickdetector",
+          "firetouchinterest", "fireproximityprompt",
+        }
+        max_line_length = 200
+        max_string_line_length = 200
+        max_code_line_length = 200
+        max_comment_line_length = 300
+        EOF
+
+        # Run luacheck on all .lua files
+        find Scr -name "*.lua" -exec luacheck {} + || true
+
+  check-structure:
+    name: Check File Structure
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Verify required files exist
+      run: |
+        echo "=== Checking required files ==="
+
+        required_files=(
+          "Scr/Modules/Main module.lua"
+          "Scr/Modules/C.lua"
+          "Scr/Luau-scripts/Main.lua"
+        )
+
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✓ $file exists ($(wc -c < "$file") bytes)"
+          else
+            echo "✗ $file MISSING!"
+            exit 1
+          fi
+        done
+
+    - name: Check for common corruption patterns
+      run: |
+        echo "=== Checking for corruption ==="
+
+        # Check for escaped characters
+        if grep -r '\\\*' Scr/ || grep -r '\\\-' Scr/; then
+          echo "✗ Found escaped characters in files!"
+          exit 1
+        fi
+
+        # Check for Windows line endings
+        if file Scr/Modules/*.lua Scr/Luau-scripts/*.lua | grep -q CRLF; then
+          echo "⚠ Warning: Windows line endings detected"
+        fi
+
+        echo "✓ No corruption detected"
+
+  deploy-check:
+    name: Deploy Readiness Check
+    runs-on: ubuntu-latest
+    needs: [validate, check-structure]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Verify raw URLs are accessible
+      run: |
+        echo "=== Checking raw GitHub URLs ==="
+
+        base_url="https://raw.githubusercontent.com/${{ github.repository }}/main/Scr"
+
+        urls=(
+          "$base_url/Modules/Main%20module.lua"
+          "$base_url/Modules/C.lua"
+          "$base_url/Luau-scripts/Main.lua"
+        )
+
+        for url in "${urls[@]}"; do
+          status=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+          if [ "$status" = "200" ]; then
+            echo "✓ $url (HTTP $status)"
+          else
+            echo "✗ $url (HTTP $status)"
+            exit 1
+          fi
+        done
+
+    - name: Generate module size report
+      run: |
+        echo "=== Module Size Report ==="
+        echo "| File | Size | Lines |"
+        echo "|------|------|-------|"
+
+        for file in Scr/Modules/*.lua Scr/Luau-scripts/*.lua; do
+          if [ -f "$file" ]; then
+            size=$(wc -c < "$file" | tr -d ' ')
+            lines=$(wc -l < "$file" | tr -d ' ')
+            echo "| $file | ${size}B | $lines |"
+          fi
+        done
+
+    - name: Create deployment summary
+      run: |
+        echo "## ✅ Deployment Ready" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Files Validated" >> $GITHUB_STEP_SUMMARY
+        echo "- Scr/Modules/Main module.lua" >> $GITHUB_STEP_SUMMARY
+        echo "- Scr/Modules/C.lua" >> $GITHUB_STEP_SUMMARY
+        echo "- Scr/Luau-scripts/Main.lua" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Usage" >> $GITHUB_STEP_SUMMARY
+        echo '\`\`\`lua' >> $GITHUB_STEP_SUMMARY
+        echo 'getgitpath = function(subpath)' >> $GITHUB_STEP_SUMMARY
+        echo '    return "https://raw.githubusercontent.com/'${{ github.repository }}'/main/Scr/" .. (subpath or "")' >> $GITHUB_STEP_SUMMARY
+        echo 'end' >> $GITHUB_STEP_SUMMARY
+        echo 'local Rayfield = loadstring(game:HttpGet(getgitpath("src").."Luau-scripts/Main.lua"))()' >> $GITHUB_STEP_SUMMARY
+        echo '\`\`\`' >> $GITHUB_STEP_SUMMARY
