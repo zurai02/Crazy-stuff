@@ -12,11 +12,11 @@
         getgitpath = function(subpath)
             return "https://raw.githubusercontent.com/zurai02/Crazy-stuff/main/Scr/" .. (subpath or "")
         end
-        local Rayfield = loadstring(game:HttpGet(getgitpath("src").."rayfield.lua"))()
+        local Rayfield = loadstring(game:HttpGet(getgitpath("src").."Luau-scripts/Main.lua"))()
 --]]
 
 -- ============================================================================
--- REMOTE MODULE LOADING (v1.1.0-MOD)
+-- REMOTE MODULE LOADING
 -- ============================================================================
 
 local function loadRemoteModule(path)
@@ -25,8 +25,7 @@ local function loadRemoteModule(path)
         return loadstring(game:HttpGet(url))()
     end)
     if not success then
-        error("[Rayfield] Failed to load remote module: " .. path .. "
-" .. tostring(result))
+        error("[Rayfield] Failed to load remote module: " .. path .. "\n" .. tostring(result))
     end
     return result
 end
@@ -51,12 +50,12 @@ local Players = C.Players
 local Workspace = C.Workspace
 
 -- ============================================================================
--- ORIGINAL RAYFIELD GEN2 CODE (with C.lua integration)
+-- RAYFIELD CORE
 -- ============================================================================
 
 local Rayfield = {}
 
--- Theme and configuration using C.lua color utilities
+-- Theme using C.lua color utilities
 Rayfield.Theme = {
     Primary = C.Color:FromHex("#1a1a2e"),
     Secondary = C.Color:FromHex("#16213e"),
@@ -66,7 +65,6 @@ Rayfield.Theme = {
     Error = C.Color:FromHex("#ff006e"),
 }
 
--- Window creation with C.lua tween integration
 function Rayfield:CreateWindow(config)
     config = config or {}
 
@@ -75,13 +73,11 @@ function Rayfield:CreateWindow(config)
     window.ActiveTab = nil
     window.Config = config
 
-    -- Create UI using C.lua services
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = config.Name or "Rayfield"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-    -- Use gethui() if available (exploit env)
     if gethui then
         screenGui.Parent = gethui()
     else
@@ -96,12 +92,10 @@ function Rayfield:CreateWindow(config)
     mainFrame.BorderSizePixel = 0
     mainFrame.Parent = screenGui
 
-    -- Rounded corners
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = mainFrame
 
-    -- Shadow
     local shadow = Instance.new("ImageLabel")
     shadow.Name = "Shadow"
     shadow.Size = UDim2.new(1, 20, 1, 20)
@@ -115,7 +109,6 @@ function Rayfield:CreateWindow(config)
     shadow.ZIndex = -1
     shadow.Parent = mainFrame
 
-    -- Topbar
     local topbar = Instance.new("Frame")
     topbar.Name = "Topbar"
     topbar.Size = UDim2.new(1, 0, 0, 40)
@@ -127,7 +120,6 @@ function Rayfield:CreateWindow(config)
     topbarCorner.CornerRadius = UDim.new(0, 8)
     topbarCorner.Parent = topbar
 
-    -- Title
     local title = Instance.new("TextLabel")
     title.Name = "Title"
     title.Size = UDim2.new(1, -100, 1, 0)
@@ -140,7 +132,6 @@ function Rayfield:CreateWindow(config)
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = topbar
 
-    -- Close button using C.lua color
     local closeBtn = Instance.new("TextButton")
     closeBtn.Name = "Close"
     closeBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -163,7 +154,6 @@ function Rayfield:CreateWindow(config)
         end)
     end)
 
-    -- Tab container
     local tabContainer = Instance.new("Frame")
     tabContainer.Name = "TabContainer"
     tabContainer.Size = UDim2.new(0, 120, 1, -40)
@@ -176,7 +166,6 @@ function Rayfield:CreateWindow(config)
     tabList.Padding = UDim.new(0, 5)
     tabList.Parent = tabContainer
 
-    -- Content area
     local contentArea = Instance.new("Frame")
     contentArea.Name = "Content"
     contentArea.Size = UDim2.new(1, -120, 1, -40)
@@ -184,7 +173,7 @@ function Rayfield:CreateWindow(config)
     contentArea.BackgroundTransparency = 1
     contentArea.Parent = mainFrame
 
-    -- Dragging with C.lua UserInputService
+    -- Dragging
     local dragging = false
     local dragStart = nil
     local startPos = nil
@@ -221,7 +210,6 @@ function Rayfield:CreateWindow(config)
         tab.Name = tabConfig.Name or "Tab"
         tab.Elements = {}
 
-        -- Tab button
         local tabBtn = Instance.new("TextButton")
         tabBtn.Name = tab.Name
         tabBtn.Size = UDim2.new(1, -10, 0, 35)
@@ -237,7 +225,6 @@ function Rayfield:CreateWindow(config)
         tabBtnCorner.CornerRadius = UDim.new(0, 6)
         tabBtnCorner.Parent = tabBtn
 
-        -- Tab content
         local tabContent = Instance.new("ScrollingFrame")
         tabContent.Name = tab.Name .. "Content"
         tabContent.Size = UDim2.new(1, -10, 1, -10)
@@ -252,27 +239,22 @@ function Rayfield:CreateWindow(config)
         contentList.Padding = UDim.new(0, 8)
         contentList.Parent = tabContent
 
-        -- Auto-size content
         contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
             tabContent.CanvasSize = UDim2.new(0, 0, 0, contentList.AbsoluteContentSize.Y + 10)
         end)
 
-        -- Tab switching
         tabBtn.MouseButton1Click:Connect(function()
             if window.ActiveTab then
                 window.ActiveTab.Content.Visible = false
                 C.tween(window.ActiveTab.Button, {BackgroundColor3 = Rayfield.Theme.Accent}, 0.2)
             end
-
             tabContent.Visible = true
             C.tween(tabBtn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.2)
             window.ActiveTab = {Button = tabBtn, Content = tabContent}
         end)
 
-        -- Element creation functions
         function tab:CreateButton(btnConfig)
             btnConfig = btnConfig or {}
-
             local btn = Instance.new("TextButton")
             btn.Name = btnConfig.Name or "Button"
             btn.Size = UDim2.new(1, 0, 0, 35)
@@ -288,22 +270,17 @@ function Rayfield:CreateWindow(config)
             btnCorner.Parent = btn
 
             btn.MouseButton1Click:Connect(function()
-                if btnConfig.Callback then
-                    btnConfig.Callback()
-                end
-                -- Button press animation using C.lua
+                if btnConfig.Callback then btnConfig.Callback() end
                 C.tween(btn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.1)
                 task.delay(0.1, function()
                     C.tween(btn, {BackgroundColor3 = Rayfield.Theme.Accent}, 0.1)
                 end)
             end)
-
             return btn
         end
 
         function tab:CreateToggle(toggleConfig)
             toggleConfig = toggleConfig or {}
-
             local toggleFrame = Instance.new("Frame")
             toggleFrame.Name = toggleConfig.Name or "Toggle"
             toggleFrame.Size = UDim2.new(1, 0, 0, 35)
@@ -357,9 +334,7 @@ function Rayfield:CreateWindow(config)
                     C.tween(switch, {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}, 0.2)
                     C.tween(knob, {Position = UDim2.new(0, 2, 0.5, -8)}, 0.2)
                 end
-                if toggleConfig.Callback then
-                    toggleConfig.Callback(enabled)
-                end
+                if toggleConfig.Callback then toggleConfig.Callback(enabled) end
             end
 
             toggleFrame.InputBegan:Connect(function(input)
@@ -372,19 +347,13 @@ function Rayfield:CreateWindow(config)
             if enabled then updateToggle() end
 
             return {
-                Set = function(self, value)
-                    enabled = value
-                    updateToggle()
-                end,
-                Get = function(self)
-                    return enabled
-                end
+                Set = function(self, value) enabled = value; updateToggle() end,
+                Get = function(self) return enabled end
             }
         end
 
         function tab:CreateSlider(sliderConfig)
             sliderConfig = sliderConfig or {}
-
             local sliderFrame = Instance.new("Frame")
             sliderFrame.Name = sliderConfig.Name or "Slider"
             sliderFrame.Size = UDim2.new(1, 0, 0, 50)
@@ -438,17 +407,12 @@ function Rayfield:CreateWindow(config)
                 local trackSize = track.AbsoluteSize.X
                 local percent = math.clamp((inputX - trackPos) / trackSize, 0, 1)
                 value = min + (max - min) * percent
-
                 if sliderConfig.Increment then
                     value = math.floor(value / sliderConfig.Increment + 0.5) * sliderConfig.Increment
                 end
-
                 fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
                 label.Text = (sliderConfig.Name or "Slider") .. ": " .. C.Math:Round(value, 2)
-
-                if sliderConfig.Callback then
-                    sliderConfig.Callback(value)
-                end
+                if sliderConfig.Callback then sliderConfig.Callback(value) end
             end
 
             local dragging = false
@@ -471,7 +435,6 @@ function Rayfield:CreateWindow(config)
                 end
             end)
 
-            -- Set initial value
             if value > min then
                 fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
             end
@@ -482,15 +445,12 @@ function Rayfield:CreateWindow(config)
                     fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
                     label.Text = (sliderConfig.Name or "Slider") .. ": " .. C.Math:Round(value, 2)
                 end,
-                Get = function(self)
-                    return value
-                end
+                Get = function(self) return value end
             }
         end
 
         function tab:CreateDropdown(dropdownConfig)
             dropdownConfig = dropdownConfig or {}
-
             local dropdownFrame = Instance.new("Frame")
             dropdownFrame.Name = dropdownConfig.Name or "Dropdown"
             dropdownFrame.Size = UDim2.new(1, 0, 0, 35)
@@ -516,7 +476,7 @@ function Rayfield:CreateWindow(config)
             arrow.Size = UDim2.new(0, 30, 0, 30)
             arrow.Position = UDim2.new(1, -35, 0.5, -15)
             arrow.BackgroundTransparency = 1
-            arrow.Text = "▼"
+            arrow.Text = "v"
             arrow.TextColor3 = Color3.new(1, 1, 1)
             arrow.TextSize = 12
             arrow.Parent = dropdownFrame
@@ -547,13 +507,11 @@ function Rayfield:CreateWindow(config)
                 if open then
                     optionsFrame.Visible = true
                     C.tween(optionsFrame, {Size = UDim2.new(1, 0, 0, #dropdownConfig.Options * 30)}, 0.2)
-                    arrow.Text = "▲"
+                    arrow.Text = "^"
                 else
                     C.tween(optionsFrame, {Size = UDim2.new(1, 0, 0, 0)}, 0.2)
-                    task.delay(0.2, function()
-                        optionsFrame.Visible = false
-                    end)
-                    arrow.Text = "▼"
+                    task.delay(0.2, function() optionsFrame.Visible = false end)
+                    arrow.Text = "v"
                 end
             end
 
@@ -578,27 +536,19 @@ function Rayfield:CreateWindow(config)
                         selected = option
                         label.Text = (dropdownConfig.Name or "Dropdown") .. ": " .. option
                         toggleDropdown()
-                        if dropdownConfig.Callback then
-                            dropdownConfig.Callback(option)
-                        end
+                        if dropdownConfig.Callback then dropdownConfig.Callback(option) end
                     end)
                 end
             end
 
             return {
-                Set = function(self, value)
-                    selected = value
-                    label.Text = (dropdownConfig.Name or "Dropdown") .. ": " .. value
-                end,
-                Get = function(self)
-                    return selected
-                end
+                Set = function(self, value) selected = value; label.Text = (dropdownConfig.Name or "Dropdown") .. ": " .. value end,
+                Get = function(self) return selected end
             }
         end
 
         function tab:CreateInput(inputConfig)
             inputConfig = inputConfig or {}
-
             local inputFrame = Instance.new("Frame")
             inputFrame.Name = inputConfig.Name or "Input"
             inputFrame.Size = UDim2.new(1, 0, 0, 35)
@@ -636,22 +586,15 @@ function Rayfield:CreateWindow(config)
             textCorner.Parent = textBox
 
             textBox.FocusLost:Connect(function()
-                if inputConfig.Callback then
-                    inputConfig.Callback(textBox.Text)
-                end
+                if inputConfig.Callback then inputConfig.Callback(textBox.Text) end
             end)
 
             return {
-                Set = function(self, value)
-                    textBox.Text = tostring(value)
-                end,
-                Get = function(self)
-                    return textBox.Text
-                end
+                Set = function(self, value) textBox.Text = tostring(value) end,
+                Get = function(self) return textBox.Text end
             }
         end
 
-        -- Select first tab by default
         if not window.ActiveTab then
             tabContent.Visible = true
             C.tween(tabBtn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.2)
@@ -662,10 +605,8 @@ function Rayfield:CreateWindow(config)
         return tab
     end
 
-    -- Notification system using C.lua
     function window:Notify(notifyConfig)
         notifyConfig = notifyConfig or {}
-
         local notifFrame = Instance.new("Frame")
         notifFrame.Size = UDim2.new(0, 250, 0, 60)
         notifFrame.Position = UDim2.new(1, -260, 1, -70)
@@ -699,19 +640,15 @@ function Rayfield:CreateWindow(config)
         notifText.TextWrapped = true
         notifText.Parent = notifFrame
 
-        -- Animate in
         notifFrame.Position = UDim2.new(1, 0, 1, -70)
         C.tween(notifFrame, {Position = UDim2.new(1, -260, 1, -70)}, 0.3)
 
         task.delay(notifyConfig.Duration or 3, function()
             C.tween(notifFrame, {Position = UDim2.new(1, 0, 1, -70)}, 0.3)
-            task.delay(0.3, function()
-                notifFrame:Destroy()
-            end)
+            task.delay(0.3, function() notifFrame:Destroy() end)
         end)
     end
 
-    -- Show window with animation
     mainFrame.Size = UDim2.new(0, 0, 0, 0)
     mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     C.tween(mainFrame, {Size = config.Size or UDim2.new(0, 600, 0, 400)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
@@ -720,43 +657,23 @@ function Rayfield:CreateWindow(config)
 end
 
 -- ============================================================================
--- VECTOR3 INTEGRATION (from Main module)
+-- EXPORTS
 -- ============================================================================
 
 Rayfield.Vector3 = Vector3Plus
 Rayfield.V3 = V3
-
--- ============================================================================
--- SERIALIZATION INTEGRATION (from Main module)
--- ============================================================================
-
 Rayfield.SerDes = SerDes
 Rayfield.SD = SerDes
-
--- ============================================================================
--- C.LUA INTEGRATION
--- ============================================================================
-
 Rayfield.C = C
 
--- ============================================================================
--- UTILITY FUNCTIONS
--- ============================================================================
-
 function Rayfield:Serialize(data, schema)
-    if schema then
-        return SerDes.Serialize(schema, data)
-    else
-        return SerDes.SerializeTable(data)
-    end
+    if schema then return SerDes.Serialize(schema, data)
+    else return SerDes.SerializeTable(data) end
 end
 
 function Rayfield:Deserialize(buffer, schema)
-    if schema then
-        return SerDes.Deserialize(schema, buffer)
-    else
-        return SerDes.DeserializeTable(buffer)
-    end
+    if schema then return SerDes.Deserialize(schema, buffer)
+    else return SerDes.DeserializeTable(buffer) end
 end
 
 function Rayfield:Encode(data)
@@ -766,9 +683,5 @@ end
 function Rayfield:Decode(base64String)
     return SerDes.DeserializeTable(SerDes.Base64ToBuffer(base64String))
 end
-
--- ============================================================================
--- RETURN
--- ============================================================================
 
 return Rayfield
