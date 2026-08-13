@@ -1,12 +1,20 @@
 --[[
     Rayfield Interface Suite
-    Modified Gen2 v1.2.0 - External Module Loading Edition (FIXED)
+    Modified Gen2 v1.3.0 - External Module Loading Edition (FULLY FIXED)
 
-    Changes from original:
-    - Loads Main module.lua and C.lua from remote GitHub repo via loadstring
-    - Uses C.lua services throughout (TweenService, RunService, etc.)
-    - Integrates Vector3Plus and SerDes from Main module
-    - FIXED: All critical bugs causing crashes and broken functionality
+    Changes from v1.2:
+    - FIXED: Shadow now in separate container with proper ZIndex layering
+    - FIXED: Intro animation no longer jumps (position set immediately)
+    - FIXED: Dropdown options render in ScreenGui to prevent clipping
+    - FIXED: Notification stacking with auto-repositioning
+    - FIXED: Window drag clamping to screen boundaries
+    - FIXED: Auto-save on value changes
+    - FIXED: Auto-load on startup
+    - FIXED: All ZIndex values properly set throughout
+    - FIXED: Shadow follows window during minimize/close animations
+    - ADDED: CreateKeybind element
+    - ADDED: Focus indicator on Input
+    - ADDED: Viewport resize handling
 
     Requires: getgitpath() function defined in parent scope
     Example:
@@ -56,7 +64,7 @@ local Workspace = C.Workspace
 
 local Rayfield = {}
 
--- Theme using C.lua color utilities (FIXED: returns Color3, not C.Color objects)
+-- Theme using C.lua color utilities
 Rayfield.Theme = {
     Primary = C.Color:FromHex("#1a1a2e"),
     Secondary = C.Color:FromHex("#16213e"),
@@ -73,15 +81,16 @@ function Rayfield:CreateWindow(config)
     window.Tabs = {}
     window.ActiveTab = nil
     window.Config = config
-    window.Flags = {} -- FIXED: Added missing Flags table for saving support
+    window.Flags = {}
     window.Destroyed = false
+    window.Notifications = {}
 
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = config.Name or "Rayfield"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-    -- FIXED: Proper parent detection for all executors
+    -- FIXED v1.3: Proper parent detection for all executors
     local function safeParent(gui)
         if syn and syn.protect_gui then
             syn.protect_gui(gui)
@@ -102,55 +111,66 @@ function Rayfield:CreateWindow(config)
         screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
     end
 
+    -- FIXED v1.3: Shadow in separate container for proper layering
+    local shadowContainer = Instance.new("Frame")
+    shadowContainer.Name = "ShadowContainer"
+    shadowContainer.Size = UDim2.new(0, 0, 0, 0)
+    shadowContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+    shadowContainer.BackgroundTransparency = 1
+    shadowContainer.BorderSizePixel = 0
+    shadowContainer.ZIndex = 1
+    shadowContainer.Parent = screenGui
+
+    local shadow = Instance.new("ImageLabel")
+    shadow.Name = "Shadow"
+    shadow.Size = UDim2.new(1, 40, 1, 40)
+    shadow.Position = UDim2.new(0, -20, 0, -20)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxassetid://5554236805"
+    shadow.ImageColor3 = Color3.new(0, 0, 0)
+    shadow.ImageTransparency = 0.5
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(23, 23, 277, 277)
+    shadow.ZIndex = 1
+    shadow.Parent = shadowContainer
+
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "Main"
-    mainFrame.Size = UDim2.new(0, 0, 0, 0) -- FIXED: Start at 0,0 for intro animation
+    mainFrame.Size = UDim2.new(0, 0, 0, 0)
     mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     mainFrame.BackgroundColor3 = Rayfield.Theme.Primary
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
+    mainFrame.ZIndex = 2
     mainFrame.Parent = screenGui
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = mainFrame
 
-    -- FIXED: Shadow uses proper ImageLabel setup
-    local shadow = Instance.new("ImageLabel")
-    shadow.Name = "Shadow"
-    shadow.Size = UDim2.new(1, 30, 1, 30)
-    shadow.Position = UDim2.new(0, -15, 0, -15)
-    shadow.BackgroundTransparency = 1
-    shadow.Image = "rbxassetid://5554236805" -- FIXED: Valid shadow asset ID
-    shadow.ImageColor3 = Color3.new(0, 0, 0)
-    shadow.ImageTransparency = 0.6
-    shadow.ScaleType = Enum.ScaleType.Slice
-    shadow.SliceCenter = Rect.new(23, 23, 277, 277)
-    shadow.ZIndex = -1
-    shadow.Parent = mainFrame
-
     local topbar = Instance.new("Frame")
     topbar.Name = "Topbar"
     topbar.Size = UDim2.new(1, 0, 0, 40)
     topbar.BackgroundColor3 = Rayfield.Theme.Secondary
     topbar.BorderSizePixel = 0
+    topbar.ZIndex = 3
     topbar.Parent = mainFrame
 
     local topbarCorner = Instance.new("UICorner")
     topbarCorner.CornerRadius = UDim.new(0, 8)
     topbarCorner.Parent = topbar
 
-    -- FIXED: Topbar bottom fill to cover rounded corner gap
     local topbarFill = Instance.new("Frame")
     topbarFill.Size = UDim2.new(1, 0, 0, 8)
     topbarFill.Position = UDim2.new(0, 0, 1, -8)
     topbarFill.BackgroundColor3 = Rayfield.Theme.Secondary
     topbarFill.BorderSizePixel = 0
+    topbarFill.ZIndex = 3
     topbarFill.Parent = topbar
 
     local title = Instance.new("TextLabel")
     title.Name = "Title"
-    title.Size = UDim2.new(1, -100, 1, 0)
+    title.Size = UDim2.new(1, -110, 1, 0)
     title.Position = UDim2.new(0, 15, 0, 0)
     title.BackgroundTransparency = 1
     title.Text = config.Name or "Rayfield"
@@ -158,6 +178,7 @@ function Rayfield:CreateWindow(config)
     title.TextSize = 18
     title.Font = Enum.Font.GothamBold
     title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 4
     title.Parent = topbar
 
     local closeBtn = Instance.new("TextButton")
@@ -170,18 +191,19 @@ function Rayfield:CreateWindow(config)
     closeBtn.TextSize = 14
     closeBtn.Font = Enum.Font.GothamBold
     closeBtn.AutoButtonColor = false
+    closeBtn.ZIndex = 4
     closeBtn.Parent = topbar
 
     local closeCorner = Instance.new("UICorner")
     closeCorner.CornerRadius = UDim.new(0, 6)
     closeCorner.Parent = closeBtn
 
-    -- FIXED: Proper close tween with cleanup
     local closing = false
     closeBtn.MouseButton1Click:Connect(function()
         if closing then return end
         closing = true
         C.tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
+        C.tween(shadowContainer, {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}, 0.3)
         task.delay(0.35, function()
             if screenGui and screenGui.Parent then
                 screenGui:Destroy()
@@ -190,7 +212,6 @@ function Rayfield:CreateWindow(config)
         end)
     end)
 
-    -- FIXED: Minimize button added
     local minBtn = Instance.new("TextButton")
     minBtn.Name = "Minimize"
     minBtn.Size = UDim2.new(0, 30, 0, 30)
@@ -201,6 +222,7 @@ function Rayfield:CreateWindow(config)
     minBtn.TextSize = 18
     minBtn.Font = Enum.Font.GothamBold
     minBtn.AutoButtonColor = false
+    minBtn.ZIndex = 4
     minBtn.Parent = topbar
 
     local minCorner = Instance.new("UICorner")
@@ -213,11 +235,13 @@ function Rayfield:CreateWindow(config)
         minimized = not minimized
         if minimized then
             C.tween(mainFrame, {Size = UDim2.new(0, originalSize.X.Offset, 0, 40)}, 0.3)
+            C.tween(shadowContainer, {Size = UDim2.new(0, originalSize.X.Offset + 40, 0, 80)}, 0.3)
             tabContainer.Visible = false
             contentArea.Visible = false
             minBtn.Text = "+"
         else
             C.tween(mainFrame, {Size = originalSize}, 0.3)
+            C.tween(shadowContainer, {Size = UDim2.new(0, originalSize.X.Offset + 40, 0, originalSize.Y.Offset + 40)}, 0.3)
             task.delay(0.15, function()
                 tabContainer.Visible = true
                 contentArea.Visible = true
@@ -232,6 +256,7 @@ function Rayfield:CreateWindow(config)
     tabContainer.Position = UDim2.new(0, 0, 0, 40)
     tabContainer.BackgroundColor3 = Rayfield.Theme.Secondary
     tabContainer.BorderSizePixel = 0
+    tabContainer.ZIndex = 3
     tabContainer.Parent = mainFrame
 
     local tabList = Instance.new("UIListLayout")
@@ -250,13 +275,14 @@ function Rayfield:CreateWindow(config)
     contentArea.Position = UDim2.new(0, 120, 0, 40)
     contentArea.BackgroundTransparency = 1
     contentArea.ClipsDescendants = true
+    contentArea.ZIndex = 3
     contentArea.Parent = mainFrame
 
-    -- FIXED: Proper dragging with mobile support
+    -- FIXED v1.3: Proper dragging with screen boundary clamping
     local dragging = false
     local dragStart = nil
     local startPos = nil
-    local dragConnection1, dragConnection2, dragConnection3
+    local dragConnection1, dragConnection2
 
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -269,10 +295,17 @@ function Rayfield:CreateWindow(config)
     dragConnection1 = UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
+            local newX = startPos.X.Offset + delta.X
+            local newY = startPos.Y.Offset + delta.Y
+
+            -- FIXED v1.3: Clamp to screen bounds
+            local viewport = Workspace.CurrentCamera.ViewportSize
+            local frameSize = mainFrame.AbsoluteSize
+            newX = math.clamp(newX, -frameSize.X / 2, viewport.X - frameSize.X / 2)
+            newY = math.clamp(newY, -frameSize.Y / 2, viewport.Y - frameSize.Y / 2)
+
+            mainFrame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+            shadowContainer.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
         end
     end)
 
@@ -282,16 +315,35 @@ function Rayfield:CreateWindow(config)
         end
     end)
 
-    -- FIXED: Cleanup on destroy
+    -- FIXED v1.3: Handle viewport resize
+    local viewportConn = Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        if mainFrame and mainFrame.Parent then
+            local viewport = Workspace.CurrentCamera.ViewportSize
+            local frameSize = mainFrame.AbsoluteSize
+            local pos = mainFrame.Position
+            local newX = math.clamp(pos.X.Offset, -frameSize.X / 2, viewport.X - frameSize.X / 2)
+            local newY = math.clamp(pos.Y.Offset, -frameSize.Y / 2, viewport.Y - frameSize.Y / 2)
+            mainFrame.Position = UDim2.new(pos.X.Scale, newX, pos.Y.Scale, newY)
+            shadowContainer.Position = UDim2.new(pos.X.Scale, newX, pos.Y.Scale, newY)
+        end
+    end)
+
     function window:Unload()
         if window.Destroyed then return end
         window.Destroyed = true
         if dragConnection1 then dragConnection1:Disconnect() end
         if dragConnection2 then dragConnection2:Disconnect() end
-        if dragConnection3 then dragConnection3:Disconnect() end
+        if viewportConn then viewportConn:Disconnect() end
         C.Player:Cleanup()
         if screenGui and screenGui.Parent then
             screenGui:Destroy()
+        end
+    end
+
+    -- FIXED v1.3: Auto-save helper
+    local function autoSave()
+        if config.Configuration and config.Configuration.autoSave then
+            window:Save()
         end
     end
 
@@ -313,6 +365,7 @@ function Rayfield:CreateWindow(config)
         tabBtn.TextSize = 14
         tabBtn.Font = Enum.Font.Gotham
         tabBtn.AutoButtonColor = false
+        tabBtn.ZIndex = 4
         tabBtn.Parent = tabContainer
 
         local tabBtnCorner = Instance.new("UICorner")
@@ -326,7 +379,9 @@ function Rayfield:CreateWindow(config)
         tabContent.BackgroundTransparency = 1
         tabContent.ScrollBarThickness = 4
         tabContent.ScrollBarImageColor3 = Rayfield.Theme.Accent
+        tabContent.ScrollBarImageTransparency = 0.3
         tabContent.Visible = false
+        tabContent.ZIndex = 3
         tabContent.Parent = contentArea
         tabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
 
@@ -342,7 +397,6 @@ function Rayfield:CreateWindow(config)
         contentPadding.PaddingRight = UDim.new(0, 5)
         contentPadding.Parent = tabContent
 
-        -- FIXED: Proper canvas size update
         local function updateCanvas()
             task.wait()
             local contentSize = contentList.AbsoluteContentSize
@@ -351,26 +405,20 @@ function Rayfield:CreateWindow(config)
 
         contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
 
-        -- FIXED: Proper tab switching with state management
         tabBtn.MouseButton1Click:Connect(function()
             if window.ActiveTab and window.ActiveTab.Content == tabContent then return end
 
-            -- Deactivate current
             if window.ActiveTab then
                 window.ActiveTab.Content.Visible = false
                 C.tween(window.ActiveTab.Button, {BackgroundColor3 = Rayfield.Theme.Accent}, 0.2)
             end
 
-            -- Activate new
             tabContent.Visible = true
             C.tween(tabBtn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.2)
             window.ActiveTab = {Button = tabBtn, Content = tabContent, Tab = tab}
-
-            -- FIXED: Update canvas after visibility change
             task.delay(0.05, updateCanvas)
         end)
 
-        -- FIXED: Hover effects
         tabBtn.MouseEnter:Connect(function()
             if window.ActiveTab and window.ActiveTab.Button == tabBtn then return end
             C.tween(tabBtn, {BackgroundColor3 = C.Color:Brighten(Rayfield.Theme.Accent, 0.1)}, 0.15)
@@ -395,20 +443,19 @@ function Rayfield:CreateWindow(config)
             btn.TextSize = 14
             btn.Font = Enum.Font.Gotham
             btn.AutoButtonColor = false
+            btn.ZIndex = 4
             btn.Parent = tabContent
 
             local btnCorner = Instance.new("UICorner")
             btnCorner.CornerRadius = UDim.new(0, 6)
             btnCorner.Parent = btn
 
-            -- FIXED: Hover and click effects
             btn.MouseEnter:Connect(function()
                 C.tween(btn, {BackgroundColor3 = C.Color:Brighten(Rayfield.Theme.Accent, 0.15)}, 0.15)
             end)
             btn.MouseLeave:Connect(function()
                 C.tween(btn, {BackgroundColor3 = Rayfield.Theme.Accent}, 0.15)
             end)
-
             btn.MouseButton1Down:Connect(function()
                 C.tween(btn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.1)
             end)
@@ -419,9 +466,7 @@ function Rayfield:CreateWindow(config)
             btn.MouseButton1Click:Connect(function()
                 if btnConfig.Callback then
                     local ok, err = pcall(btnConfig.Callback)
-                    if not ok then
-                        warn("[Rayfield] Button callback error: " .. tostring(err))
-                    end
+                    if not ok then warn("[Rayfield] Button callback error: " .. tostring(err)) end
                 end
             end)
 
@@ -441,6 +486,7 @@ function Rayfield:CreateWindow(config)
             toggleFrame.Name = toggleConfig.Name or "Toggle"
             toggleFrame.Size = UDim2.new(1, 0, 0, 35)
             toggleFrame.BackgroundColor3 = Rayfield.Theme.Secondary
+            toggleFrame.ZIndex = 4
             toggleFrame.Parent = tabContent
 
             local toggleCorner = Instance.new("UICorner")
@@ -457,6 +503,7 @@ function Rayfield:CreateWindow(config)
             label.Font = Enum.Font.Gotham
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.TextTruncate = Enum.TextTruncate.AtEnd
+            label.ZIndex = 5
             label.Parent = toggleFrame
 
             local switch = Instance.new("Frame")
@@ -464,6 +511,7 @@ function Rayfield:CreateWindow(config)
             switch.Size = UDim2.new(0, 40, 0, 20)
             switch.Position = UDim2.new(1, -50, 0.5, -10)
             switch.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            switch.ZIndex = 5
             switch.Parent = toggleFrame
 
             local switchCorner = Instance.new("UICorner")
@@ -475,6 +523,7 @@ function Rayfield:CreateWindow(config)
             knob.Size = UDim2.new(0, 16, 0, 16)
             knob.Position = UDim2.new(0, 2, 0.5, -8)
             knob.BackgroundColor3 = Color3.new(1, 1, 1)
+            knob.ZIndex = 6
             knob.Parent = switch
 
             local knobCorner = Instance.new("UICorner")
@@ -484,8 +533,7 @@ function Rayfield:CreateWindow(config)
             local enabled = toggleConfig.Default or false
             local flag = toggleConfig.Flag or (toggleConfig.Name and toggleConfig.Name:gsub("%s+", "")) or "Toggle"
 
-            -- FIXED: Proper toggle update function
-            local function updateToggle()
+            local function updateToggle(skipCallback)
                 if enabled then
                     C.tween(switch, {BackgroundColor3 = Rayfield.Theme.Success}, 0.2)
                     C.tween(knob, {Position = UDim2.new(0, 22, 0.5, -8)}, 0.2)
@@ -493,33 +541,27 @@ function Rayfield:CreateWindow(config)
                     C.tween(switch, {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}, 0.2)
                     C.tween(knob, {Position = UDim2.new(0, 2, 0.5, -8)}, 0.2)
                 end
-
-                -- FIXED: Update flags
                 window.Flags[flag] = enabled
-
-                if toggleConfig.Callback then
+                if not skipCallback and toggleConfig.Callback then
                     local ok, err = pcall(toggleConfig.Callback, enabled)
-                    if not ok then
-                        warn("[Rayfield] Toggle callback error: " .. tostring(err))
-                    end
+                    if not ok then warn("[Rayfield] Toggle callback error: " .. tostring(err)) end
                 end
+                autoSave()
             end
 
-            -- FIXED: Click detection on entire frame
             local clickDetector = Instance.new("TextButton")
             clickDetector.Name = "ClickDetector"
             clickDetector.Size = UDim2.new(1, 0, 1, 0)
             clickDetector.BackgroundTransparency = 1
             clickDetector.Text = ""
+            clickDetector.ZIndex = 7
             clickDetector.Parent = toggleFrame
-            clickDetector.ZIndex = 2
 
             clickDetector.MouseButton1Click:Connect(function()
                 enabled = not enabled
                 updateToggle()
             end)
 
-            -- FIXED: Initialize state properly
             if enabled then
                 switch.BackgroundColor3 = Rayfield.Theme.Success
                 knob.Position = UDim2.new(0, 22, 0.5, -8)
@@ -527,7 +569,6 @@ function Rayfield:CreateWindow(config)
                 switch.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
                 knob.Position = UDim2.new(0, 2, 0.5, -8)
             end
-
             window.Flags[flag] = enabled
 
             local handle = {
@@ -535,18 +576,7 @@ function Rayfield:CreateWindow(config)
                 Set = function(self, value, skipCallback)
                     enabled = not not value
                     self.value = enabled
-                    window.Flags[flag] = enabled
-                    if enabled then
-                        C.tween(switch, {BackgroundColor3 = Rayfield.Theme.Success}, 0.2)
-                        C.tween(knob, {Position = UDim2.new(0, 22, 0.5, -8)}, 0.2)
-                    else
-                        C.tween(switch, {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}, 0.2)
-                        C.tween(knob, {Position = UDim2.new(0, 2, 0.5, -8)}, 0.2)
-                    end
-                    if not skipCallback and toggleConfig.Callback then
-                        local ok, err = pcall(toggleConfig.Callback, enabled)
-                        if not ok then warn("[Rayfield] Toggle callback error: " .. tostring(err)) end
-                    end
+                    updateToggle(skipCallback)
                 end,
                 Get = function(self) return enabled end,
                 Destroy = function(self) toggleFrame:Destroy() end,
@@ -563,6 +593,7 @@ function Rayfield:CreateWindow(config)
             sliderFrame.Name = sliderConfig.Name or "Slider"
             sliderFrame.Size = UDim2.new(1, 0, 0, 50)
             sliderFrame.BackgroundColor3 = Rayfield.Theme.Secondary
+            sliderFrame.ZIndex = 4
             sliderFrame.Parent = tabContent
 
             local sliderCorner = Instance.new("UICorner")
@@ -579,6 +610,7 @@ function Rayfield:CreateWindow(config)
             label.Font = Enum.Font.Gotham
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.TextTruncate = Enum.TextTruncate.AtEnd
+            label.ZIndex = 5
             label.Parent = sliderFrame
 
             local track = Instance.new("Frame")
@@ -587,6 +619,7 @@ function Rayfield:CreateWindow(config)
             track.Position = UDim2.new(0, 10, 0, 32)
             track.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
             track.BorderSizePixel = 0
+            track.ZIndex = 5
             track.Parent = sliderFrame
 
             local trackCorner = Instance.new("UICorner")
@@ -598,6 +631,7 @@ function Rayfield:CreateWindow(config)
             fill.Size = UDim2.new(0, 0, 1, 0)
             fill.BackgroundColor3 = Rayfield.Theme.Success
             fill.BorderSizePixel = 0
+            fill.ZIndex = 6
             fill.Parent = track
 
             local fillCorner = Instance.new("UICorner")
@@ -610,7 +644,6 @@ function Rayfield:CreateWindow(config)
             local flag = sliderConfig.Flag or (sliderConfig.Name and sliderConfig.Name:gsub("%s+", "")) or "Slider"
             local increment = sliderConfig.Increment
 
-            -- FIXED: Proper slider update with increment support
             local function updateSlider(inputX, skipCallback)
                 local trackPos = track.AbsolutePosition.X
                 local trackSize = math.max(track.AbsoluteSize.X, 1)
@@ -622,7 +655,6 @@ function Rayfield:CreateWindow(config)
                 else
                     value = rawValue
                 end
-
                 value = math.clamp(value, min, max)
 
                 local fillPercent = (value - min) / (max - min)
@@ -634,16 +666,16 @@ function Rayfield:CreateWindow(config)
                     local ok, err = pcall(sliderConfig.Callback, value)
                     if not ok then warn("[Rayfield] Slider callback error: " .. tostring(err)) end
                 end
+                autoSave()
             end
 
-            -- FIXED: Slider drag with proper input handling
             local sliderDragging = false
             local clickDetector = Instance.new("TextButton")
             clickDetector.Name = "ClickDetector"
             clickDetector.Size = UDim2.new(1, 0, 1, 0)
             clickDetector.BackgroundTransparency = 1
             clickDetector.Text = ""
-            clickDetector.ZIndex = 2
+            clickDetector.ZIndex = 7
             clickDetector.Parent = sliderFrame
 
             clickDetector.InputBegan:Connect(function(input)
@@ -665,7 +697,6 @@ function Rayfield:CreateWindow(config)
                 end
             end)
 
-            -- FIXED: Initialize fill position
             if max > min then
                 local initPercent = math.clamp((value - min) / (max - min), 0, 1)
                 fill.Size = UDim2.new(initPercent, 0, 1, 0)
@@ -686,6 +717,7 @@ function Rayfield:CreateWindow(config)
                         local ok, err = pcall(sliderConfig.Callback, value)
                         if not ok then warn("[Rayfield] Slider callback error: " .. tostring(err)) end
                     end
+                    autoSave()
                 end,
                 Get = function(self) return value end,
                 Destroy = function(self)
@@ -707,6 +739,7 @@ function Rayfield:CreateWindow(config)
             dropdownFrame.Size = UDim2.new(1, 0, 0, 35)
             dropdownFrame.BackgroundColor3 = Rayfield.Theme.Secondary
             dropdownFrame.ClipsDescendants = false
+            dropdownFrame.ZIndex = 4
             dropdownFrame.Parent = tabContent
 
             local dropdownCorner = Instance.new("UICorner")
@@ -723,6 +756,7 @@ function Rayfield:CreateWindow(config)
             label.Font = Enum.Font.Gotham
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.TextTruncate = Enum.TextTruncate.AtEnd
+            label.ZIndex = 5
             label.Parent = dropdownFrame
 
             local arrow = Instance.new("TextLabel")
@@ -730,22 +764,24 @@ function Rayfield:CreateWindow(config)
             arrow.Size = UDim2.new(0, 30, 0, 30)
             arrow.Position = UDim2.new(1, -35, 0.5, -15)
             arrow.BackgroundTransparency = 1
-            arrow.Text = "\u25BC" -- FIXED: Unicode down arrow
+            arrow.Text = "\u25BC"
             arrow.TextColor3 = Color3.new(1, 1, 1)
             arrow.TextSize = 12
             arrow.Font = Enum.Font.GothamBold
+            arrow.ZIndex = 5
             arrow.Parent = dropdownFrame
 
+            -- FIXED v1.3: Options in ScreenGui-level container to prevent clipping
             local optionsFrame = Instance.new("Frame")
-            optionsFrame.Name = "Options"
-            optionsFrame.Size = UDim2.new(1, 0, 0, 0)
-            optionsFrame.Position = UDim2.new(0, 0, 0, 35)
+            optionsFrame.Name = "Options_" .. dropdownFrame.Name
+            optionsFrame.Size = UDim2.new(0, 0, 0, 0)
+            optionsFrame.Position = UDim2.new(0, 0, 0, 0)
             optionsFrame.BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)
             optionsFrame.BorderSizePixel = 0
             optionsFrame.ClipsDescendants = true
             optionsFrame.Visible = false
-            optionsFrame.ZIndex = 10
-            optionsFrame.Parent = dropdownFrame
+            optionsFrame.ZIndex = 100
+            optionsFrame.Parent = screenGui
 
             local optionsCorner = Instance.new("UICorner")
             optionsCorner.CornerRadius = UDim.new(0, 6)
@@ -792,16 +828,24 @@ function Rayfield:CreateWindow(config)
                 end
             end
 
+            local function updateOptionsPosition()
+                local absPos = dropdownFrame.AbsolutePosition
+                local absSize = dropdownFrame.AbsoluteSize
+                optionsFrame.Position = UDim2.new(0, absPos.X, 0, absPos.Y + absSize.Y + 2)
+                optionsFrame.Size = UDim2.new(0, absSize.X, 0, 0)
+            end
+
             local function toggleDropdown()
                 open = not open
                 if open then
+                    updateOptionsPosition()
                     optionsFrame.Visible = true
                     local optionCount = dropdownConfig.Options and #dropdownConfig.Options or 0
                     local targetHeight = math.min(optionCount * 32 + 8, 200)
-                    C.tween(optionsFrame, {Size = UDim2.new(1, 0, 0, targetHeight)}, 0.2)
-                    arrow.Text = "\u25B2" -- FIXED: Unicode up arrow
+                    C.tween(optionsFrame, {Size = UDim2.new(0, dropdownFrame.AbsoluteSize.X, 0, targetHeight)}, 0.2)
+                    arrow.Text = "\u25B2"
                 else
-                    C.tween(optionsFrame, {Size = UDim2.new(1, 0, 0, 0)}, 0.2)
+                    C.tween(optionsFrame, {Size = UDim2.new(0, dropdownFrame.AbsoluteSize.X, 0, 0)}, 0.2)
                     task.delay(0.2, function()
                         if not open then optionsFrame.Visible = false end
                     end)
@@ -809,77 +853,88 @@ function Rayfield:CreateWindow(config)
                 end
             end
 
-            -- FIXED: Click detection
             local clickDetector = Instance.new("TextButton")
             clickDetector.Name = "ClickDetector"
             clickDetector.Size = UDim2.new(1, 0, 1, 0)
             clickDetector.BackgroundTransparency = 1
             clickDetector.Text = ""
-            clickDetector.ZIndex = 2
+            clickDetector.ZIndex = 7
             clickDetector.Parent = dropdownFrame
 
             clickDetector.MouseButton1Click:Connect(function()
                 toggleDropdown()
             end)
 
-            -- FIXED: Build options
-            if dropdownConfig.Options then
-                for _, option in ipairs(dropdownConfig.Options) do
-                    local optionBtn = Instance.new("TextButton")
-                    optionBtn.Size = UDim2.new(1, 0, 0, 28)
-                    optionBtn.BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)
-                    optionBtn.Text = option
-                    optionBtn.TextColor3 = Color3.new(1, 1, 1)
-                    optionBtn.TextSize = 13
-                    optionBtn.Font = Enum.Font.Gotham
-                    optionBtn.AutoButtonColor = false
-                    optionBtn.Parent = optionsFrame
+            local function buildOptions()
+                for _, child in ipairs(optionsFrame:GetChildren()) do
+                    if child:IsA("TextButton") then child:Destroy() end
+                end
+                if dropdownConfig.Options then
+                    for _, option in ipairs(dropdownConfig.Options) do
+                        local optionBtn = Instance.new("TextButton")
+                        optionBtn.Size = UDim2.new(1, 0, 0, 28)
+                        optionBtn.BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)
+                        optionBtn.Text = option
+                        optionBtn.TextColor3 = Color3.new(1, 1, 1)
+                        optionBtn.TextSize = 13
+                        optionBtn.Font = Enum.Font.Gotham
+                        optionBtn.AutoButtonColor = false
+                        optionBtn.ZIndex = 101
+                        optionBtn.Parent = optionsFrame
 
-                    local optionCorner = Instance.new("UICorner")
-                    optionCorner.CornerRadius = UDim.new(0, 4)
-                    optionCorner.Parent = optionBtn
+                        local optionCorner = Instance.new("UICorner")
+                        optionCorner.CornerRadius = UDim.new(0, 4)
+                        optionCorner.Parent = optionBtn
 
-                    -- FIXED: Hover effect
-                    optionBtn.MouseEnter:Connect(function()
-                        C.tween(optionBtn, {BackgroundColor3 = C.Color:Brighten(Rayfield.Theme.Accent, 0.1)}, 0.1)
-                    end)
-                    optionBtn.MouseLeave:Connect(function()
-                        C.tween(optionBtn, {BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)}, 0.1)
-                    end)
+                        optionBtn.MouseEnter:Connect(function()
+                            C.tween(optionBtn, {BackgroundColor3 = C.Color:Brighten(Rayfield.Theme.Accent, 0.1)}, 0.1)
+                        end)
+                        optionBtn.MouseLeave:Connect(function()
+                            C.tween(optionBtn, {BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)}, 0.1)
+                        end)
 
-                    optionBtn.MouseButton1Click:Connect(function()
-                        if multi then
-                            local found = false
-                            for i, v in ipairs(selectedValues) do
-                                if v == option then
-                                    table.remove(selectedValues, i)
-                                    found = true
-                                    break
+                        optionBtn.MouseButton1Click:Connect(function()
+                            if multi then
+                                local found = false
+                                for i, v in ipairs(selectedValues) do
+                                    if v == option then
+                                        table.remove(selectedValues, i)
+                                        found = true
+                                        break
+                                    end
+                                end
+                                if not found then
+                                    table.insert(selectedValues, option)
+                                end
+                                window.Flags[flag] = selectedValues
+                                if dropdownConfig.Callback then
+                                    local ok, err = pcall(dropdownConfig.Callback, selectedValues)
+                                    if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
+                                end
+                            else
+                                selected = option
+                                window.Flags[flag] = selected
+                                toggleDropdown()
+                                if dropdownConfig.Callback then
+                                    local ok, err = pcall(dropdownConfig.Callback, selected)
+                                    if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
                                 end
                             end
-                            if not found then
-                                table.insert(selectedValues, option)
-                            end
-                            window.Flags[flag] = selectedValues
-                            if dropdownConfig.Callback then
-                                local ok, err = pcall(dropdownConfig.Callback, selectedValues)
-                                if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
-                            end
-                        else
-                            selected = option
-                            window.Flags[flag] = selected
-                            toggleDropdown()
-                            if dropdownConfig.Callback then
-                                local ok, err = pcall(dropdownConfig.Callback, selected)
-                                if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
-                            end
-                        end
-                        refreshLabel()
-                    end)
+                            refreshLabel()
+                            autoSave()
+                        end)
+                    end
                 end
             end
 
+            buildOptions()
             refreshLabel()
+
+            local posConn = mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
+                if open then
+                    updateOptionsPosition()
+                end
+            end)
 
             local handle = {
                 value = multi and selectedValues or selected,
@@ -898,70 +953,18 @@ function Rayfield:CreateWindow(config)
                         local ok, err = pcall(dropdownConfig.Callback, self.value)
                         if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
                     end
+                    autoSave()
                 end,
                 Get = function(self) return multi and selectedValues or selected end,
                 Refresh = function(self, newOptions)
-                    -- FIXED: Clear and rebuild options
-                    for _, child in ipairs(optionsFrame:GetChildren()) do
-                        if child:IsA("TextButton") then child:Destroy() end
-                    end
                     dropdownConfig.Options = newOptions
-                    if dropdownConfig.Options then
-                        for _, option in ipairs(dropdownConfig.Options) do
-                            local optionBtn = Instance.new("TextButton")
-                            optionBtn.Size = UDim2.new(1, 0, 0, 28)
-                            optionBtn.BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)
-                            optionBtn.Text = option
-                            optionBtn.TextColor3 = Color3.new(1, 1, 1)
-                            optionBtn.TextSize = 13
-                            optionBtn.Font = Enum.Font.Gotham
-                            optionBtn.AutoButtonColor = false
-                            optionBtn.Parent = optionsFrame
-
-                            local optionCorner = Instance.new("UICorner")
-                            optionCorner.CornerRadius = UDim.new(0, 4)
-                            optionCorner.Parent = optionBtn
-
-                            optionBtn.MouseEnter:Connect(function()
-                                C.tween(optionBtn, {BackgroundColor3 = C.Color:Brighten(Rayfield.Theme.Accent, 0.1)}, 0.1)
-                            end)
-                            optionBtn.MouseLeave:Connect(function()
-                                C.tween(optionBtn, {BackgroundColor3 = C.Color:Darken(Rayfield.Theme.Secondary, 0.05)}, 0.1)
-                            end)
-
-                            optionBtn.MouseButton1Click:Connect(function()
-                                if multi then
-                                    local found = false
-                                    for i, v in ipairs(selectedValues) do
-                                        if v == option then
-                                            table.remove(selectedValues, i)
-                                            found = true
-                                            break
-                                        end
-                                    end
-                                    if not found then
-                                        table.insert(selectedValues, option)
-                                    end
-                                    window.Flags[flag] = selectedValues
-                                    if dropdownConfig.Callback then
-                                        local ok, err = pcall(dropdownConfig.Callback, selectedValues)
-                                        if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
-                                    end
-                                else
-                                    selected = option
-                                    window.Flags[flag] = selected
-                                    toggleDropdown()
-                                    if dropdownConfig.Callback then
-                                        local ok, err = pcall(dropdownConfig.Callback, selected)
-                                        if not ok then warn("[Rayfield] Dropdown callback error: " .. tostring(err)) end
-                                    end
-                                end
-                                refreshLabel()
-                            end)
-                        end
-                    end
+                    buildOptions()
                 end,
-                Destroy = function(self) dropdownFrame:Destroy() end,
+                Destroy = function(self)
+                    if posConn then posConn:Disconnect() end
+                    optionsFrame:Destroy()
+                    dropdownFrame:Destroy()
+                end,
             }
 
             table.insert(tab.Elements, handle)
@@ -975,6 +978,7 @@ function Rayfield:CreateWindow(config)
             inputFrame.Name = inputConfig.Name or "Input"
             inputFrame.Size = UDim2.new(1, 0, 0, 35)
             inputFrame.BackgroundColor3 = Rayfield.Theme.Secondary
+            inputFrame.ZIndex = 4
             inputFrame.Parent = tabContent
 
             local inputCorner = Instance.new("UICorner")
@@ -991,6 +995,7 @@ function Rayfield:CreateWindow(config)
             label.Font = Enum.Font.Gotham
             label.TextXAlignment = Enum.TextXAlignment.Left
             label.TextTruncate = Enum.TextTruncate.AtEnd
+            label.ZIndex = 5
             label.Parent = inputFrame
 
             local textBox = Instance.new("TextBox")
@@ -1004,25 +1009,33 @@ function Rayfield:CreateWindow(config)
             textBox.TextSize = 13
             textBox.Font = Enum.Font.Gotham
             textBox.ClearTextOnFocus = false
+            textBox.ZIndex = 5
             textBox.Parent = inputFrame
 
             local textCorner = Instance.new("UICorner")
             textCorner.CornerRadius = UDim.new(0, 4)
             textCorner.Parent = textBox
 
+            -- FIXED v1.3: Focus indicator
+            textBox.Focused:Connect(function()
+                C.tween(textBox, {BackgroundColor3 = C.Color:Brighten(Rayfield.Theme.Primary, 0.05)}, 0.15)
+            end)
+            textBox.FocusLost:Connect(function()
+                C.tween(textBox, {BackgroundColor3 = Rayfield.Theme.Primary}, 0.15)
+            end)
+
             local flag = inputConfig.Flag or (inputConfig.Name and inputConfig.Name:gsub("%s+", "")) or "Input"
             window.Flags[flag] = textBox.Text
 
-            -- FIXED: Input validation
             textBox.FocusLost:Connect(function(enterPressed)
                 window.Flags[flag] = textBox.Text
                 if inputConfig.Callback then
                     local ok, err = pcall(inputConfig.Callback, textBox.Text, enterPressed)
                     if not ok then warn("[Rayfield] Input callback error: " .. tostring(err)) end
                 end
+                autoSave()
             end)
 
-            -- FIXED: Numeric input support
             if inputConfig.Numeric then
                 textBox:GetPropertyChangedSignal("Text"):Connect(function()
                     local text = textBox.Text
@@ -1045,6 +1058,7 @@ function Rayfield:CreateWindow(config)
                         local ok, err = pcall(inputConfig.Callback, textBox.Text, false)
                         if not ok then warn("[Rayfield] Input callback error: " .. tostring(err)) end
                     end
+                    autoSave()
                 end,
                 Get = function(self) return textBox.Text end,
                 Destroy = function(self) inputFrame:Destroy() end,
@@ -1055,13 +1069,126 @@ function Rayfield:CreateWindow(config)
             return handle
         end
 
-        -- FIXED: CreateLabel element
+        -- FIXED v1.3: Keybind element
+        function tab:CreateKeybind(keybindConfig)
+            keybindConfig = keybindConfig or {}
+            local keybindFrame = Instance.new("Frame")
+            keybindFrame.Name = keybindConfig.Name or "Keybind"
+            keybindFrame.Size = UDim2.new(1, 0, 0, 35)
+            keybindFrame.BackgroundColor3 = Rayfield.Theme.Secondary
+            keybindFrame.ZIndex = 4
+            keybindFrame.Parent = tabContent
+
+            local keybindCorner = Instance.new("UICorner")
+            keybindCorner.CornerRadius = UDim.new(0, 6)
+            keybindCorner.Parent = keybindFrame
+
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, -80, 1, 0)
+            label.Position = UDim2.new(0, 10, 0, 0)
+            label.BackgroundTransparency = 1
+            label.Text = keybindConfig.Name or "Keybind"
+            label.TextColor3 = Color3.new(1, 1, 1)
+            label.TextSize = 14
+            label.Font = Enum.Font.Gotham
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.TextTruncate = Enum.TextTruncate.AtEnd
+            label.ZIndex = 5
+            label.Parent = keybindFrame
+
+            local keyBtn = Instance.new("TextButton")
+            keyBtn.Size = UDim2.new(0, 70, 0, 25)
+            keyBtn.Position = UDim2.new(1, -75, 0.5, -12)
+            keyBtn.BackgroundColor3 = Rayfield.Theme.Primary
+            keyBtn.Text = keybindConfig.Default and tostring(keybindConfig.Default.Name) or "None"
+            keyBtn.TextColor3 = Color3.new(1, 1, 1)
+            keyBtn.TextSize = 12
+            keyBtn.Font = Enum.Font.Gotham
+            keyBtn.AutoButtonColor = false
+            keyBtn.ZIndex = 5
+            keyBtn.Parent = keybindFrame
+
+            local keyBtnCorner = Instance.new("UICorner")
+            keyBtnCorner.CornerRadius = UDim.new(0, 4)
+            keyBtnCorner.Parent = keyBtn
+
+            local currentKey = keybindConfig.Default
+            local flag = keybindConfig.Flag or (keybindConfig.Name and keybindConfig.Name:gsub("%s+", "")) or "Keybind"
+            local listening = false
+            local inputConn
+
+            keyBtn.MouseButton1Click:Connect(function()
+                if listening then return end
+                listening = true
+                keyBtn.Text = "..."
+                C.tween(keyBtn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.15)
+
+                inputConn = UserInputService.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        currentKey = input.KeyCode
+                        keyBtn.Text = currentKey.Name
+                        window.Flags[flag] = currentKey.Name
+                        listening = false
+                        C.tween(keyBtn, {BackgroundColor3 = Rayfield.Theme.Primary}, 0.15)
+                        if inputConn then inputConn:Disconnect() end
+                        if keybindConfig.onChanged then
+                            local ok, err = pcall(keybindConfig.onChanged, currentKey)
+                            if not ok then warn("[Rayfield] Keybind onChanged error: " .. tostring(err)) end
+                        end
+                        autoSave()
+                    elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        listening = false
+                        keyBtn.Text = currentKey and currentKey.Name or "None"
+                        C.tween(keyBtn, {BackgroundColor3 = Rayfield.Theme.Primary}, 0.15)
+                        if inputConn then inputConn:Disconnect() end
+                    end
+                end)
+            end)
+
+            local pressConn = UserInputService.InputBegan:Connect(function(input)
+                if not listening and currentKey and input.KeyCode == currentKey then
+                    if keybindConfig.Callback then
+                        local ok, err = pcall(keybindConfig.Callback)
+                        if not ok then warn("[Rayfield] Keybind callback error: " .. tostring(err)) end
+                    end
+                end
+            end)
+
+            window.Flags[flag] = currentKey and currentKey.Name or nil
+
+            local handle = {
+                value = currentKey,
+                Set = function(self, key, skipCallback)
+                    currentKey = key
+                    self.value = currentKey
+                    keyBtn.Text = currentKey and currentKey.Name or "None"
+                    window.Flags[flag] = currentKey and currentKey.Name or nil
+                    if not skipCallback and keybindConfig.onChanged then
+                        local ok, err = pcall(keybindConfig.onChanged, currentKey)
+                        if not ok then warn("[Rayfield] Keybind onChanged error: " .. tostring(err)) end
+                    end
+                    autoSave()
+                end,
+                Get = function(self) return currentKey end,
+                Destroy = function(self)
+                    if inputConn then inputConn:Disconnect() end
+                    if pressConn then pressConn:Disconnect() end
+                    keybindFrame:Destroy()
+                end,
+            }
+
+            table.insert(tab.Elements, handle)
+            task.delay(0.05, updateCanvas)
+            return handle
+        end
+
         function tab:CreateLabel(labelConfig)
             labelConfig = labelConfig or {}
             local labelFrame = Instance.new("Frame")
             labelFrame.Name = labelConfig.Name or "Label"
             labelFrame.Size = UDim2.new(1, 0, 0, 25)
             labelFrame.BackgroundTransparency = 1
+            labelFrame.ZIndex = 4
             labelFrame.Parent = tabContent
 
             local labelText = Instance.new("TextLabel")
@@ -1074,6 +1201,7 @@ function Rayfield:CreateWindow(config)
             labelText.Font = labelConfig.Bold and Enum.Font.GothamBold or Enum.Font.Gotham
             labelText.TextXAlignment = labelConfig.Alignment or Enum.TextXAlignment.Left
             labelText.TextWrapped = true
+            labelText.ZIndex = 5
             labelText.Parent = labelFrame
 
             local handle = {
@@ -1090,7 +1218,6 @@ function Rayfield:CreateWindow(config)
             return handle
         end
 
-        -- FIXED: CreateDivider element
         function tab:CreateDivider()
             local divider = Instance.new("Frame")
             divider.Name = "Divider"
@@ -1098,6 +1225,7 @@ function Rayfield:CreateWindow(config)
             divider.Position = UDim2.new(0, 10, 0, 0)
             divider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
             divider.BorderSizePixel = 0
+            divider.ZIndex = 4
             divider.Parent = tabContent
 
             local handle = {
@@ -1109,7 +1237,6 @@ function Rayfield:CreateWindow(config)
             return handle
         end
 
-        -- FIXED: First tab auto-activation
         if not window.ActiveTab then
             tabContent.Visible = true
             C.tween(tabBtn, {BackgroundColor3 = Rayfield.Theme.Text}, 0.2)
@@ -1121,7 +1248,7 @@ function Rayfield:CreateWindow(config)
         return tab
     end
 
-    -- FIXED: Proper notification system
+    -- FIXED v1.3: Notification stacking
     function window:Notify(notifyConfig)
         notifyConfig = notifyConfig or {}
 
@@ -1131,6 +1258,7 @@ function Rayfield:CreateWindow(config)
         notifFrame.BackgroundColor3 = Rayfield.Theme.Secondary
         notifFrame.BorderSizePixel = 0
         notifFrame.ClipsDescendants = true
+        notifFrame.ZIndex = 1000
         notifFrame.Parent = screenGui
 
         local notifCorner = Instance.new("UICorner")
@@ -1146,6 +1274,7 @@ function Rayfield:CreateWindow(config)
         notifTitle.TextSize = 14
         notifTitle.Font = Enum.Font.GothamBold
         notifTitle.TextXAlignment = Enum.TextXAlignment.Left
+        notifTitle.ZIndex = 1001
         notifTitle.Parent = notifFrame
 
         local notifText = Instance.new("TextLabel")
@@ -1158,34 +1287,58 @@ function Rayfield:CreateWindow(config)
         notifText.Font = Enum.Font.Gotham
         notifText.TextXAlignment = Enum.TextXAlignment.Left
         notifText.TextWrapped = true
+        notifText.ZIndex = 1001
         notifText.Parent = notifFrame
 
-        -- FIXED: Animate in
-        C.tween(notifFrame, {Size = UDim2.new(0, 250, 0, 60), Position = UDim2.new(1, -260, 1, -70)}, 0.3)
+        local stackOffset = #window.Notifications * 70
+        table.insert(window.Notifications, notifFrame)
+
+        C.tween(notifFrame, {
+            Size = UDim2.new(0, 250, 0, 60),
+            Position = UDim2.new(1, -260, 1, -70 - stackOffset)
+        }, 0.3)
 
         local duration = notifyConfig.Duration or 3
         task.delay(duration, function()
             if notifFrame and notifFrame.Parent then
-                C.tween(notifFrame, {Position = UDim2.new(1, 10, 1, -70), Size = UDim2.new(0, 250, 0, 0)}, 0.3)
+                C.tween(notifFrame, {
+                    Position = UDim2.new(1, 10, 1, -70 - stackOffset),
+                    Size = UDim2.new(0, 250, 0, 0)
+                }, 0.3)
                 task.delay(0.35, function()
                     if notifFrame and notifFrame.Parent then
                         notifFrame:Destroy()
+                        for i, n in ipairs(window.Notifications) do
+                            if n == notifFrame then
+                                table.remove(window.Notifications, i)
+                                break
+                            end
+                        end
+                        for i, n in ipairs(window.Notifications) do
+                            if n and n.Parent then
+                                local newOffset = (i - 1) * 70
+                                C.tween(n, {Position = UDim2.new(1, -260, 1, -70 - newOffset)}, 0.2)
+                            end
+                        end
                     end
                 end)
             end
         end)
     end
 
-    -- FIXED: Window visibility methods
     function window:Show()
         mainFrame.Visible = true
+        shadowContainer.Visible = true
         C.tween(mainFrame, {Size = config.Size or UDim2.new(0, 600, 0, 400)}, 0.3)
+        C.tween(shadowContainer, {Size = UDim2.new(0, (config.Size or UDim2.new(0, 600, 0, 400)).X.Offset + 40, 0, (config.Size or UDim2.new(0, 600, 0, 400)).Y.Offset + 40)}, 0.3)
     end
 
     function window:Hide()
         C.tween(mainFrame, {Size = UDim2.new(0, 0, 0, 0)}, 0.3)
+        C.tween(shadowContainer, {Size = UDim2.new(0, 0, 0, 0)}, 0.3)
         task.delay(0.3, function()
             mainFrame.Visible = false
+            shadowContainer.Visible = false
         end)
     end
 
@@ -1200,7 +1353,6 @@ function Rayfield:CreateWindow(config)
     function window:Navigate(tabName)
         for _, tab in ipairs(window.Tabs) do
             if tab.Name == tabName then
-                -- Simulate click on tab button
                 for _, child in ipairs(tabContainer:GetChildren()) do
                     if child:IsA("TextButton") and child.Name == tabName then
                         child.MouseButton1Click:Fire()
@@ -1212,7 +1364,6 @@ function Rayfield:CreateWindow(config)
         return false
     end
 
-    -- FIXED: Save/Load methods
     function window:Save(name)
         if not config.Configuration then return false end
         local fileName = name or (config.Configuration.fileName or config.Name or "Rayfield")
@@ -1225,7 +1376,6 @@ function Rayfield:CreateWindow(config)
         end
 
         local json = HttpService:JSONEncode(data)
-        -- Use writefile if available (executor feature)
         if writefile then
             makefolder(folder)
             writefile(path, json)
@@ -1245,11 +1395,10 @@ function Rayfield:CreateWindow(config)
             local data = HttpService:JSONDecode(json)
             for flag, value in pairs(data) do
                 window.Flags[flag] = value
-                -- Update UI elements if they exist
                 for _, tab in ipairs(window.Tabs) do
                     for _, elem in ipairs(tab.Elements) do
                         if elem.Set then
-                            elem:Set(value, true) -- skip callback
+                            elem:Set(value, true)
                         end
                     end
                 end
@@ -1274,13 +1423,24 @@ function Rayfield:CreateWindow(config)
         end
     end
 
-    -- FIXED: Intro animation
+    -- FIXED v1.3: Proper intro animation (position set immediately, only size tweens)
+    local targetSize = config.Size or UDim2.new(0, 600, 0, 400)
+    local targetPos = config.Position or UDim2.new(0.5, -300, 0.5, -200)
+    mainFrame.Position = targetPos
+    shadowContainer.Position = targetPos
+    shadowContainer.Size = UDim2.new(0, 0, 0, 0)
+
     task.delay(0.05, function()
-        local targetSize = config.Size or UDim2.new(0, 600, 0, 400)
-        local targetPos = config.Position or UDim2.new(0.5, -300, 0.5, -200)
-        mainFrame.Position = targetPos
         C.tween(mainFrame, {Size = targetSize}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        C.tween(shadowContainer, {Size = UDim2.new(0, targetSize.X.Offset + 40, 0, targetSize.Y.Offset + 40)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     end)
+
+    -- FIXED v1.3: Auto-load on startup
+    if config.Configuration and config.Configuration.autoLoad then
+        task.delay(0.6, function()
+            window:Load()
+        end)
+    end
 
     return window
 end
